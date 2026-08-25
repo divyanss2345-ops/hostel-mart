@@ -98,7 +98,7 @@ export default function Menu() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-ink-900/80 via-transparent to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-                  {p.available ? (
+                  {p.stock > 0 ? (
                     <span className="badge bg-success-500/20 text-success-400 border border-success-500/40 backdrop-blur-sm">
                       Available
                     </span>
@@ -129,8 +129,8 @@ export default function Menu() {
                     </button>
                     <button
                       onClick={() => handleAdd(p)}
-                      disabled={!p.available}
-                      className="btn-primary px-3 py-2"
+                      disabled={p.stock === 0}
+                      className={p.stock === 0 ? "bg-gray-400 opacity-50 cursor-not-allowed px-3 py-2 rounded-md" : "btn-primary px-3 py-2"}
                     >
                       <ShoppingCart className="w-4 h-4" />
                     </button>
