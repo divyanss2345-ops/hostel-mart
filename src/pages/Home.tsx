@@ -153,7 +153,7 @@ export default function Home() {
               </div>
               <div className="sm:w-1/2 p-6 flex flex-col">
                 <div className="flex items-center gap-2 mb-3">
-                  {product.available ? (
+                  {product.stock > 0 ? (
                     <span className="badge bg-success-500/15 text-success-400 border border-success-500/30">
                       Available
                     </span>
@@ -176,8 +176,8 @@ export default function Home() {
                   </div>
                   <button
                     onClick={handleAddToCart}
-                    disabled={!product.available}
-                    className="btn-primary"
+                    disabled={product.stock <= 0}
+                    className={product.stock <= 0 ? "bg-gray-400 opacity-50 cursor-not-allowed px-3 py-2 rounded-md" : "btn-primary"}
                   >
                     <ShoppingCart className="w-4 h-4" />
                     Add to Cart
