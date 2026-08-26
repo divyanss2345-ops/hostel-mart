@@ -192,6 +192,12 @@ export default function Home() {
           </div>
         )}
       </section>
+      {/* Watermark Footer */}
+<div className="w-full text-center py-6 mt-10 border-t border-gray-800/50">
+  <p className="text-xs text-gray-500 tracking-wider uppercase font-semibold">
+    Created for Hostel Mart • Powered by <span className="text-brand-400">Gemini AI</span>
+  </p>
+</div>
     </div>
   );
 }
