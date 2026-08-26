@@ -15,7 +15,7 @@ export default function Home() {
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase.rpc('get_products_student');
+      const { data, error } = await supabase.from('products').select('*').order('name');
       if (error) {
         console.error(error);
         setLoading(false);

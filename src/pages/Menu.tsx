@@ -18,7 +18,7 @@ export default function Menu() {
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase.rpc('get_products_student');
+      const { data, error } = await supabase.from('products').select('*').order('name');
       if (error) {
         setError('Something went wrong. Please try again.');
         setLoading(false);
