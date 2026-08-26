@@ -8,86 +8,110 @@ import EmptyState from '@/components/ui/EmptyState';
 
 export default function AdminInventory() {
   const { toast } = useToast();
-  const [product, setProduct] = useState<ProductAdmin | null>(null);
+  const [products, setProducts] = useState<ProductAdmin[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stockInput, setStockInput] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
 
-  async function loadProduct() {
+  async function loadProducts() {
     setLoading(true);
-    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: true });
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: true });
+
     if (error) {
       toast('Failed to load inventory.', 'error');
       setLoading(false);
       return;
     }
-    const p = (data as ProductAdmin[])?.[0] ?? null;
-    setProduct(p);
-    setStockInput(p ? String(p.stock) : '');
+
+    const prods = (data as ProductAdmin[]) ?? [];
+    setProducts(prods);
+
+    // Initialize stock input values for each product
+    const inputs: Record<string, string> = {};
+    prods.forEach(p => {
+      inputs[p.id] = String(p.stock);
+    });
+    setStockInputs(inputs);
     setLoading(false);
   }
 
   useEffect(() => {
-    loadProduct();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadProducts();
   }, []);
 
-  async function updateStock(delta: number) {
+  async function updateStock(productId: string, delta: number) {
+    const product = products.find(p => p.id === productId);
     if (!product) return;
+
     const newStock = Math.max(0, product.stock + delta);
-    setSaving(true);
+    setSavingId(productId);
+
     const { error } = await supabase.rpc('admin_update_product', {
-      p_product_id: product.id,
+      p_product_id: productId,
       p_stock: newStock,
     });
+
     if (error) {
       toast(error.message || 'Failed to update stock.', 'error');
-      setSaving(false);
+      setSavingId(null);
       return;
     }
-    setProduct({ ...product, stock: newStock });
-    setStockInput(String(newStock));
-    setSaving(false);
-    toast(`Stock ${delta > 0 ? 'increased' : 'decreased'} by ${Math.abs(delta)}.`, 'success');
+
+    setProducts(products.map(p => p.id === productId ? { ...p, stock: newStock } : p));
+    setStockInputs({ ...stockInputs, [productId]: String(newStock) });
+    setSavingId(null);
+    toast(`Stock updated successfully.`, 'success');
   }
 
-  async function setStock() {
+  async function setStock(productId: string) {
+    const product = products.find(p => p.id === productId);
     if (!product) return;
-    const val = parseInt(stockInput, 10);
+
+    const val = parseInt(stockInputs[productId], 10);
     if (isNaN(val) || val < 0) {
       toast('Please enter a valid stock number.', 'error');
       return;
     }
-    setSaving(true);
+
+    setSavingId(productId);
     const { error } = await supabase.rpc('admin_update_product', {
-      p_product_id: product.id,
+      p_product_id: productId,
       p_stock: val,
     });
+
     if (error) {
       toast(error.message || 'Failed to update stock.', 'error');
-      setSaving(false);
+      setSavingId(null);
       return;
     }
-    setProduct({ ...product, stock: val });
-    setSaving(false);
+
+    setProducts(products.map(p => p.id === productId ? { ...p, stock: val } : p));
+    setSavingId(null);
     toast('Stock updated successfully.', 'success');
   }
 
-  async function toggleAvailable() {
+  async function toggleAvailable(productId: string) {
+    const product = products.find(p => p.id === productId);
     if (!product) return;
-    setSaving(true);
+
+    setSavingId(productId);
     const { error } = await supabase.rpc('admin_update_product', {
-      p_product_id: product.id,
+      p_product_id: productId,
       p_available: !product.available,
     });
+
     if (error) {
       toast(error.message || 'Failed to update availability.', 'error');
-      setSaving(false);
+      setSavingId(null);
       return;
     }
-    setProduct({ ...product, available: !product.available });
-    setSaving(false);
-    toast(`Maggie packets are now ${!product.available ? 'available' : 'unavailable'}.`, 'success');
+
+    setProducts(products.map(p => p.id === productId ? { ...p, available: !p.available } : p));
+    setSavingId(null);
+    toast(`${product.name} status updated.`, 'success');
   }
 
   if (loading) {
@@ -98,147 +122,124 @@ export default function AdminInventory() {
     );
   }
 
-  if (!product) {
-    return (
-      <AdminLayout active="inventory">
-        <EmptyState
-          icon={<Package className="w-8 h-8" />}
-          title="No products found"
-          description="Add a product from the Product & Price section."
-        />
-      </AdminLayout>
-    );
-  }
-
-  const stockLevel = product.stock === 0 ? 'out' : product.stock <= 10 ? 'low' : 'good';
-  const stockColor =
-    stockLevel === 'out' ? 'text-danger-400 bg-danger-500/10' : stockLevel === 'low' ? 'text-warning-400 bg-warning-500/10' : 'text-success-400 bg-success-500/10';
-
   return (
     <AdminLayout active="inventory">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white font-display">Inventory</h1>
-          <p className="text-sm text-ink-400 mt-1">Manage Maggie packet stock levels</p>
+          <h1 className="text-2xl font-bold text-white font-display">Inventory Management</h1>
+          <p className="text-sm text-ink-400 mt-1">Manage stock levels for all products in your store</p>
         </div>
-        <button onClick={loadProduct} className="btn-ghost px-3 py-2" title="Refresh">
+        <button
+          onClick={loadProducts}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-ink-800 text-white hover:bg-ink-700 transition text-sm font-medium"
+        >
           <RefreshCw className="w-4 h-4" />
+          Refresh
         </button>
       </div>
 
-      {/* Stock status card */}
-      <div className="card p-6 mb-6">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-14 h-14 rounded-xl overflow-hidden bg-ink-700 flex-shrink-0">
-            {product.image_url && (
-              <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-            )}
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-white">{product.name}</h2>
-            <p className="text-sm text-ink-400">₹{Number(product.price).toFixed(0)} per packet</p>
-          </div>
-          <div className="ml-auto text-right">
-            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold ${stockColor}`}>
-              {stockLevel === 'out' && <AlertTriangle className="w-4 h-4" />}
-              {product.stock} packets in stock
+      {products.length === 0 ? (
+        <EmptyState
+          icon={Package}
+          title="No products found"
+          description="Add products to your store database to manage their inventory here."
+        />
+      ) : (
+        <div className="space-y-6">
+          {products.map(product => (
+            <div key={product.id} className="card p-6 border border-ink-800">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-ink-800">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-ink-800 flex-shrink-0">
+                    <img
+                      src={product.image_url}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100';
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-lg font-bold text-white font-display">{product.name}</h2>
+                      <button
+                        onClick={() => toggleAvailable(product.id)}
+                        disabled={savingId === product.id}
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium transition ${
+                          product.available
+                            ? 'bg-success-500/10 text-success-400 border border-success-500/20 hover:bg-success-500/20'
+                            : 'bg-danger-500/10 text-danger-400 border border-danger-500/20 hover:bg-danger-500/20'
+                        }`}
+                      >
+                        {product.available ? 'Available' : 'Unavailable'}
+                      </button>
+                    </div>
+                    <p className="text-sm text-brand-400 font-medium mt-0.5">₹{product.price} per packet</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-ink-900/60 px-4 py-2 rounded-xl border border-ink-800/80">
+                  <Package className="w-4 h-4 text-ink-400" />
+                  <span className="text-sm text-ink-300">Current Stock:</span>
+                  <span className={`text-base font-bold ${product.stock > 0 ? 'text-white' : 'text-danger-400'}`}>
+                    {product.stock} packets
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-medium text-ink-400 uppercase tracking-wider mb-2">
+                    Quick Adjust Stock
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[-1, -5, 5, 10, 50].map(delta => (
+                      <button
+                        key={delta}
+                        onClick={() => updateStock(product.id, delta)}
+                        disabled={savingId === product.id || (product.stock + delta < 0)}
+                        className={`flex items-center gap-1 px-3.5 py-2 rounded-xl text-sm font-semibold transition disabled:opacity-50 ${
+                          delta > 0
+                            ? 'bg-success-500/10 text-success-400 hover:bg-success-500/20 border border-success-500/20'
+                            : 'bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 border border-danger-500/20'
+                        }`}
+                      >
+                        {delta > 0 ? <Plus className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                        {delta > 0 ? `+${delta}` : delta}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-ink-400 uppercase tracking-wider mb-2">
+                    Set Exact Stock
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={stockInputs[product.id] ?? ''}
+                      onChange={(e) => setStockInputs({ ...stockInputs, [product.id]: e.target.value })}
+                      className="input flex-1"
+                      placeholder="Enter exact stock"
+                    />
+                    <button
+                      onClick={() => setStock(product.id)}
+                      disabled={savingId === product.id}
+                      className="btn-primary px-4 py-2 flex items-center gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-
-        {/* Quick adjust */}
-        <div className="border-t border-ink-700 pt-5">
-          <p className="text-sm font-semibold text-white mb-3">Quick Adjust Stock</p>
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => updateStock(-1)}
-              disabled={saving || product.stock === 0}
-              className="btn-danger px-4 py-2.5"
-            >
-              <Minus className="w-4 h-4" />
-              1
-            </button>
-            <button
-              onClick={() => updateStock(-5)}
-              disabled={saving || product.stock < 5}
-              className="btn-danger px-4 py-2.5"
-            >
-              <Minus className="w-4 h-4" />
-              5
-            </button>
-            <button
-              onClick={() => updateStock(5)}
-              disabled={saving}
-              className="btn-secondary px-4 py-2.5"
-            >
-              <Plus className="w-4 h-4" />
-              5
-            </button>
-            <button
-              onClick={() => updateStock(10)}
-              disabled={saving}
-              className="btn-secondary px-4 py-2.5"
-            >
-              <Plus className="w-4 h-4" />
-              10
-            </button>
-            <button
-              onClick={() => updateStock(50)}
-              disabled={saving}
-              className="btn-secondary px-4 py-2.5"
-            >
-              <Plus className="w-4 h-4" />
-              50
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Set exact stock */}
-      <div className="card p-6 mb-6">
-        <p className="text-sm font-semibold text-white mb-3">Set Exact Stock</p>
-        <div className="flex gap-3">
-          <input
-            type="number"
-            value={stockInput}
-            onChange={(e) => setStockInput(e.target.value)}
-            min={0}
-            className="input"
-            placeholder="Enter stock quantity"
-          />
-          <button onClick={setStock} disabled={saving} className="btn-primary px-5">
-            {saving ? <ButtonLoader /> : <Save className="w-4 h-4" />}
-            Save
-          </button>
-        </div>
-      </div>
-
-      {/* Availability toggle */}
-      <div className="card p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-white">Product Availability</p>
-            <p className="text-xs text-ink-400 mt-1">
-              {product.available
-                ? 'Maggie packets are currently visible and orderable by students.'
-                : 'Maggie packets are hidden from students and cannot be ordered.'}
-            </p>
-          </div>
-          <button
-            onClick={toggleAvailable}
-            disabled={saving}
-            className={`relative w-12 h-6 rounded-full transition-colors ${
-              product.available ? 'bg-success-500' : 'bg-ink-600'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                product.available ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
+      )}
     </AdminLayout>
   );
 }
